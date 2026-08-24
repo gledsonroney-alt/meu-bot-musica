@@ -14,7 +14,7 @@ def baixar_audio(busca_ou_link):
 
     opcoes = {
         'format': 'bestaudio/best',
-        'default_search': 'ytsearch',  # Busca por nome no YouTube se não for link
+        'default_search': 'scsearch',  # Busca por nome no YouTube se não for link
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
