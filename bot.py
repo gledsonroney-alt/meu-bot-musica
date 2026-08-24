@@ -114,5 +114,12 @@ def main():
     print("Bot rodando com sucesso...")
     app.run_polling()
 
+import asyncio
+
 if __name__ == '__main__':
-    main()
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        main()
+    except (KeyboardInterrupt, SystemExit):
+        print("Bot desligado.")
