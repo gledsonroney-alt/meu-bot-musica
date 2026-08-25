@@ -7,21 +7,25 @@ import yt_dlp
 TOKEN = "8812668800:AAHhAI9keRnUyPgZ5Ssv-_Swr0WP-ENM6wc"
 
 # Função para baixar o áudio usando yt-dlp
+# Função para baixar o áudio usando yt-dlp
 def baixar_audio(busca_ou_link):
-    # Remove dois pontos (:) do início do texto para evitar erro de protocolo/URL falsa
     if ":" in busca_ou_link and not busca_ou_link.startswith("http"):
         busca_ou_link = busca_ou_link.replace(":", " ")
 
     opcoes = {
         'format': 'bestaudio/best',
-        'default_search': 'scsearch',  # Busca por nome no YouTube se não for link
+        'default_search': 'ytsearch',  # Voltamos para o YouTube com parâmetros extras
         'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'ignoreerrors': True,         # Ignora pequenas falhas de metadados
+        'nocheckcertificate': True,   # Evita bloqueios de certificados de segurança
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
         'quiet': True
+    }
+
     }
     
     with yt_dlp.YoutubeDL(opcoes) as ydl:
