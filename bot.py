@@ -27,9 +27,9 @@ def pesquisar_link_na_web(nome_musica):
             
         links_v = re.findall(r'watch\?v=([^"& \s]+)', html)
         if links_v and len(links_v) > 0:
-            id_limpo = links_v[0]  # CORRIGIDO: Coleta estritamente o índice 0 da lista capturada
-            print(f"Link extraído pelo DuckDuckGo: https://www.youtube.com/watch?v={id_limpo}")
-            return f"https://www.youtube.com/watch?v={id_limpo}"
+            id_limpo = links_v[0]  # CORRIGIDO: Coleta estritamente o texto do primeiro ID encontrado
+            print(f"Link extraído pelo DuckDuckGo: https://youtube.com{id_limpo}")
+            return f"https://youtube.com{id_limpo}"
     except Exception as e:
         print(f"DuckDuckGo falhou: {str(e)}. Pulando para o backup...")
 
@@ -46,9 +46,9 @@ def pesquisar_link_na_web(nome_musica):
             
         links_g = re.findall(r'url\?q=https://www\.youtube\.com/watch\?v=([^"&]+)', html)
         if links_g and len(links_g) > 0:
-            id_limpo = links_g[0]  # CORRIGIDO: Coleta estritamente o índice 0 da lista capturada de backup
-            print(f"Link extraído pelo Google Vídeos: https://www.youtube.com/watch?v={id_limpo}")
-            return f"https://www.youtube.com/watch?v={id_limpo}"
+            id_limpo = links_g[0]  # CORRIGIDO: Coleta estritamente o texto do primeiro ID de backup
+            print(f"Link extraído pelo Google Vídeos: https://youtube.com{id_limpo}")
+            return f"https://youtube.com{id_limpo}"
     except Exception as e:
         print(f"Google Vídeos falhou: {str(e)}")
         
@@ -61,7 +61,7 @@ def baixar_audio_por_link(link_direto):
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'nocheckcertificate': True,
         'ignoreerrors': True,
-        'http_chunk_size': 1048576, # Fatia o tráfego para camuflar o IP na nuvem do Render
+        'http_chunk_size': 1048576, # Segmenta o download para simular tráfego comum de navegador
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
