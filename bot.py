@@ -7,7 +7,6 @@ import yt_dlp
 TOKEN = "8812668800:AAHhAI9keRnUyPgZ5Ssv-_Swr0WP-ENM6wc"
 
 # Função para baixar o áudio usando yt-dlp
-# Função para baixar o áudio usando yt-dlp
 def baixar_audio(busca_ou_link):
     if ":" in busca_ou_link and not busca_ou_link.startswith("http"):
         busca_ou_link = busca_ou_link.replace(":", " ")
@@ -18,6 +17,7 @@ def baixar_audio(busca_ou_link):
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'ignoreerrors': True,         # Ignora pequenas falhas de metadados
         'nocheckcertificate': True,   # Evita bloqueios de certificados de segurança
+        'cookiefile': 'cookies.txt',  # <--- LINHA ADICIONADA: Usa os cookies para evitar o bloqueio de bot
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -26,7 +26,6 @@ def baixar_audio(busca_ou_link):
         'quiet': True
     }
 
-    
     with yt_dlp.YoutubeDL(opcoes) as ydl:
         info = ydl.extract_info(busca_ou_link, download=True)
         
@@ -104,7 +103,7 @@ async def receber_arquivo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         linhas = [linha.strip() for item in f.readlines() if (linha := item.strip())]
 
     os.remove(caminho_temporario)
-    await processar_e_enviar(update, linhas=linhas)
+    await processar_e_enviar(update, lines=linhas)
 
 # Execução do Bot com timeouts estendidos para segurança
 def main():
