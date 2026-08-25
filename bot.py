@@ -10,42 +10,69 @@ import yt_dlp
 # Seu Token gerado no BotFather
 TOKEN = "8812668800:AAHhAI9keRnUyPgZ5Ssv-_Swr0WP-ENM6wc"
 
-# Função que pesquisa no DuckDuckGo para capturar o link do YouTube sem bloqueios
+# Função inteligente com múltiplos IFs de busca contra bloqueios
 def pesquisar_link_musica(nome_musica):
+    busca_termo = f"{nome_musica} youtube"
+    
+    # ----------------------------------------------------------------------
+    # TENTATIVA 1 (1º IF): Busca via DuckDuckGo HTML
+    # ----------------------------------------------------------------------
     try:
-        # Formata a busca para focar no YouTube
-        busca = f"{nome_musica} youtube"
-        url_busca = "https://duckduckgo.com" + urllib.parse.quote(busca)
-        
-        # Simula um navegador real para o buscador liberar os resultados
+        print("Tentando buscar link pelo motor: DuckDuckGo")
+        url_busca = "https://duckduckgo.com" + urllib.parse.quote(busca_termo)
         requisicao = urllib.request.Request(
             url_busca, 
             headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         )
-        
         with urllib.request.urlopen(requisicao, timeout=10) as resposta:
             html = resposta.read().decode('utf-8')
             
-        # Procura por links do YouTube dentro do código da página
-        links_youtube = re.findall(r'href="https://(?:www\.)?youtube\.com/watch\?v=([^"&]+)"', html)
-        
+        links_youtube = re.findall(r'watch\?v=([^"& \s]+)', html)
         if links_youtube:
-            link_direto = f"https://youtube.com{links_youtube[0]}"
-            return link_direto, nome_musica
+            id_video = links_youtube[0] # Pega estritamente o primeiro resultado
+            print("Sucesso na busca via DuckDuckGo!")
+            return f"https://youtube.com{id_video}", nome_musica
+        else:
+            raise Exception("Nenhum link capturado na estrutura do DuckDuckGo.")
             
     except Exception as e:
-        print(f"Erro na busca externa: {str(e)}")
+        print(f"O motor DuckDuckGo falhou devido a restrições: {str(e)}. Pulando para a próxima alternativa...")
+
+    # ----------------------------------------------------------------------
+    # TENTATIVA 2 (2º IF): Sistema de Backup via Raspagem do Google Vídeos
+    # ----------------------------------------------------------------------
+    try:
+        print("Tentando buscar link pelo motor alternativo: Google Vídeos")
+        url_google = "https://google.com" + urllib.parse.quote(busca_termo) + "&tbm=vid"
+        requisicao = urllib.request.Request(
+            url_google, 
+            headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+        )
+        with urllib.request.urlopen(requisicao, timeout=10) as resposta:
+            html = resposta.read().decode('utf-8')
+            
+        links_google = re.findall(r'url\?q=https://www\.youtube\.com/watch\?v=([^"&]+)', html)
+        if links_google:
+            id_video = links_google[0] # Pega estritamente o primeiro resultado de backup
+            print("Sucesso na busca via Google Vídeos!")
+            return f"https://youtube.com{id_video}", nome_musica
+        else:
+            raise Exception("Nenhum link capturado na estrutura do Google.")
+            
+    except Exception as e:
+        print(f"O motor secundário Google falhou: {str(e)}.")
         
+    # Se todas as rotas falharem por bloqueio de IP simultâneo na nuvem
     return None, None
 
-# Função interna que baixa o áudio a partir do link direto encontrado
+# Função interna que baixa o áudio a partir do link direto encontrado pelas buscas
 def baixar_audio_por_link(link_direto):
     opcoes_download = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'nocheckcertificate': True,
         'ignoreerrors': True,
-        'http_chunk_size': 1048576, # Quebra o arquivo em partes para evitar travas no download
+        'http_chunk_size': 1048576, # Fatia o download para o YouTube não derrubar a conexão
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -64,7 +91,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     instrucao = (
         "🎵 *Bem-vindo ao Buscador Resiliente de Músicas!* 🎵\n\n"
         "Envie o nome de uma música.\n"
-        "Eu irei identificar o link na web e te darei um *botão para baixar* em MP3!"
+        "Eu irei varrer os motores de busca atrás do link e te darei um *botão para baixar* em MP3!"
     )
     await update.message.reply_text(instrucao, parse_mode="Markdown")
 
@@ -77,7 +104,7 @@ async def receber_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await status_busca.delete()
     
     if not url_direta:
-        await update.message.reply_text("❌ Não encontrei referências estáveis para essa música na web.")
+        await update.message.reply_text("❌ Todas as tentativas de busca falharam por restrições na nuvem.")
         return
 
     # Criação do botão físico integrado na mensagem do Telegram
