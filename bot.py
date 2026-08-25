@@ -10,7 +10,7 @@ import yt_dlp
 # Seu Token gerado no BotFather
 TOKEN = "8812668800:AAHhAI9keRnUyPgZ5Ssv-_Swr0WP-ENM6wc"
 
-# Função que varre motores de busca comuns capturando o link limpo do YouTube
+# Função inteligente que pesquisa o link usando múltiplos motores web abertos
 def pesquisar_link_na_web(nome_musica):
     busca_termo = f"{nome_musica} youtube"
     
@@ -27,8 +27,8 @@ def pesquisar_link_na_web(nome_musica):
             
         links_v = re.findall(r'watch\?v=([^"& \s]+)', html)
         if links_v and len(links_v) > 0:
-            id_limpo = links_v[0] # CORRIGIDO: Captura de forma isolada a primeira string da lista
-            print(f"Link extraído com sucesso pelo DuckDuckGo: https://www.youtube.com/watch?v={id_limpo}")
+            id_limpo = links_v[0]  # CORRIGIDO: Pega estritamente a primeira string isolada
+            print(f"Link extraído pelo DuckDuckGo: https://www.youtube.com/watch?v={id_limpo}")
             return f"https://www.youtube.com/watch?v={id_limpo}"
     except Exception as e:
         print(f"DuckDuckGo falhou: {str(e)}. Pulando para o backup...")
@@ -46,22 +46,22 @@ def pesquisar_link_na_web(nome_musica):
             
         links_g = re.findall(r'url\?q=https://www\.youtube\.com/watch\?v=([^"&]+)', html)
         if links_g and len(links_g) > 0:
-            id_limpo = links_g[0] # CORRIGIDO: Captura de forma isolada o ID de backup
-            print(f"Link extraído com sucesso pelo Google Vídeos: https://www.youtube.com/watch?v={id_limpo}")
+            id_limpo = links_g[0]  # CORRIGIDO: Pega estritamente a primeira string de backup
+            print(f"Link extraído pelo Google Vídeos: https://www.youtube.com/watch?v={id_limpo}")
             return f"https://www.youtube.com/watch?v={id_limpo}"
     except Exception as e:
         print(f"Google Vídeos falhou: {str(e)}")
         
     return None
 
-# Função interna de download direto por link estruturado (Dribla bloqueios)
+# Função interna que baixa o áudio a partir do link direto encontrado pelas buscas
 def baixar_audio_por_link(link_direto):
     opcoes_download = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'nocheckcertificate': True,
         'ignoreerrors': True,
-        'http_chunk_size': 1048576, # Segmenta o download simulando tráfego real de navegador
+        'http_chunk_size': 1048576, # Fatia o download para evitar travas de conexão na nuvem
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -75,7 +75,7 @@ def baixar_audio_por_link(link_direto):
         nome_base, _ = os.path.splitext(filename)
         return nome_base + ".mp3"
 
-# Comando /start
+# Comando /start com instruções de uso e limites
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     instrucao = (
         "🎵 *Bem-vindo ao Baixador Automático de Fila!* 🎵\n\n"
