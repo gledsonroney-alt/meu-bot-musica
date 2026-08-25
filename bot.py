@@ -1,5 +1,8 @@
 import os
 import asyncio
+import re
+import urllib.request
+import urllib.parse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 import yt_dlp
@@ -7,32 +10,42 @@ import yt_dlp
 # Seu Token gerado no BotFather
 TOKEN = "8812668800:AAHhAI9keRnUyPgZ5Ssv-_Swr0WP-ENM6wc"
 
-# Função que pesquisa a música no SoundCloud para pegar o link (Livre de bloqueio de IP)
+# Função que pesquisa no DuckDuckGo para capturar o link do YouTube sem bloqueios
 def pesquisar_link_musica(nome_musica):
-    opcoes_busca = {
-        'format': 'bestaudio/best',
-        'default_search': 'scsearch1', # Busca o primeiro resultado no SoundCloud
-        'nocheckcertificate': True,
-        'ignoreerrors': True,
-        'quiet': True,
-    }
     try:
-        with yt_dlp.YoutubeDL(opcoes_busca) as ydl:
-            info = ydl.extract_info(nome_musica, download=False)
-            if info and 'entries' in info and len(info['entries']) > 0:
-                video = info['entries'][0]
-                return video['webpage_url'], video['title']
+        # Formata a busca para focar no YouTube
+        busca = f"{nome_musica} youtube"
+        url_busca = "https://duckduckgo.com" + urllib.parse.quote(busca)
+        
+        # Simula um navegador real para o buscador liberar os resultados
+        requisicao = urllib.request.Request(
+            url_busca, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        
+        with urllib.request.urlopen(requisicao, timeout=10) as resposta:
+            html = resposta.read().decode('utf-8')
+            
+        # Procura por links do YouTube dentro do código da página
+        links_youtube = re.findall(r'href="https://(?:www\.)?youtube\.com/watch\?v=([^"&]+)"', html)
+        
+        if links_youtube:
+            link_direto = f"https://youtube.com{links_youtube[0]}"
+            return link_direto, nome_musica
+            
     except Exception as e:
-        print(f"Erro na busca: {str(e)}")
+        print(f"Erro na busca externa: {str(e)}")
+        
     return None, None
 
-# Função interna que baixa o áudio a partir do link encontrado
+# Função interna que baixa o áudio a partir do link direto encontrado
 def baixar_audio_por_link(link_direto):
     opcoes_download = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'nocheckcertificate': True,
         'ignoreerrors': True,
+        'http_chunk_size': 1048576, # Quebra o arquivo em partes para evitar travas no download
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -51,20 +64,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     instrucao = (
         "🎵 *Bem-vindo ao Buscador Resiliente de Músicas!* 🎵\n\n"
         "Envie o nome de uma música.\n"
-        "Eu irei identificar o link e te darei um *botão para baixar* em MP3!"
+        "Eu irei identificar o link na web e te darei um *botão para baixar* em MP3!"
     )
     await update.message.reply_text(instrucao, parse_mode="Markdown")
 
 # Processador de texto que identifica a música e gera o botão interativo
 async def receber_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     nome_musica = update.message.text.strip()
-    status_busca = await update.message.reply_text(f"🔍 Buscando referências para: '{nome_musica}'...")
+    status_busca = await update.message.reply_text(f"🔍 Buscando referências na web para: '{nome_musica}'...")
     
     url_direta, titulo_video = pesquisar_link_musica(nome_musica)
     await status_busca.delete()
     
     if not url_direta:
-        await update.message.reply_text("❌ Não consegui identificar essa música nas plataformas livres na nuvem.")
+        await update.message.reply_text("❌ Não encontrei referências estáveis para essa música na web.")
         return
 
     # Criação do botão físico integrado na mensagem do Telegram
@@ -117,7 +130,3 @@ if __name__ == '__main__':
         main()
     except (KeyboardInterrupt, SystemExit):
         print("Bot desligado.")
-
-
-
-
