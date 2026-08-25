@@ -1,4 +1,5 @@
 import os
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import yt_dlp
@@ -8,16 +9,17 @@ TOKEN = "8812668800:AAHhAI9keRnUyPgZ5Ssv-_Swr0WP-ENM6wc"
 
 # Função para baixar o áudio usando yt-dlp
 def baixar_audio(busca_ou_link):
+    # Remove dois pontos (:) do início do texto para evitar erro de protocolo/URL falsa
     if ":" in busca_ou_link and not busca_ou_link.startswith("http"):
         busca_ou_link = busca_ou_link.replace(":", " ")
 
-        opcoes = {
+    opcoes = {
         'format': 'bestaudio/best',
-        'default_search': 'ytsearch',  
+        'default_search': 'ytsearch',  # Busca por nome no YouTube se não for link
         'outtmpl': 'downloads/%(title)s.%(ext)s',
-        'cookiefile': 'cookies.txt',   # <--- ESSA LINHA FORÇA O USO DOS COOKIES
-        'ignoreerrors': True,         
-        'nocheckcertificate': True,   
+        'cookiefile': 'cookies.txt',   # Utiliza os cookies para evitar o bloqueio de robô
+        'ignoreerrors': True,         # Ignora pequenas falhas de metadados
+        'nocheckcertificate': True,   # Evita bloqueios de certificados de segurança
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -25,14 +27,20 @@ def baixar_audio(busca_ou_link):
         }],
         'quiet': True
     }
-
-
+    
     with yt_dlp.YoutubeDL(opcoes) as ydl:
         info = ydl.extract_info(busca_ou_link, download=True)
         
-        # Correção crucial para o erro 'list object has no attribute setdefault'
+        # Proteção caso o YouTube bloqueie a requisição e retorne None
+        if info is None:
+            raise Exception("O YouTube barrou o download. Verifique se o arquivo cookies.txt está atualizado no GitHub.")
+            
         if 'entries' in info:
-            video = info['entries'][0]  # Pega o primeiro item da lista de resultados
+            # Se for uma lista de resultados da busca por texto, pega o primeiro vídeo válido
+            if len(info['entries']) > 0 and info['entries'][0] is not None:
+                video = info['entries'][0]
+            else:
+                raise Exception("Nenhum resultado encontrado para esta busca.")
         else:
             video = info
         
@@ -44,7 +52,7 @@ def baixar_audio(busca_ou_link):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     instrucao = (
         "🎵 *Bem-vindo ao Baixador de Músicas!* 🎵\n\n"
-        "Here estão as melhores formas de enviar suas músicas para evitar erros:\n\n"
+        "Aqui estão as melhores formas de enviar suas músicas para evitar erros:\n\n"
         "📝 *Opção 1: Digitar direto no chat*\n"
         "• Envie uma música ou link por linha.\n"
         "• ⚠️ *Recomendado:* No máximo *5 músicas* por mensagem.\n\n"
@@ -68,6 +76,7 @@ async def processar_e_enviar(update: Update, linhas: list):
     os.makedirs("downloads", exist_ok=True)
 
     for indice, item in enumerate(linhas, start=1):
+        # Mostra o progresso atualizado (ex: [1/27]) para o usuário acompanhar
         progresso = await update.message.reply_text(f"⏳ [{indice}/{total}] Baixando: {item}...")
         try:
             caminho_arquivo = baixar_audio(item)
@@ -85,8 +94,7 @@ async def processar_e_enviar(update: Update, linhas: list):
 async def receber_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text
     linhas = [linha.strip() for item in texto.split('\n') if (linha := item.strip())]
-    await processar_e_enviar(update, linhas=linhas)
-
+    await processar_e_enviar(update, linhas)
 
 # Processador de arquivos de texto (.txt) enviados
 async def receber_arquivo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -104,7 +112,7 @@ async def receber_arquivo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         linhas = [linha.strip() for item in f.readlines() if (linha := item.strip())]
 
     os.remove(caminho_temporario)
-    await processar_e_enviar(update, lines=linhas)
+    await processar_e_enviar(update, linhas=linhas)
 
 # Execução do Bot com timeouts estendidos para segurança
 def main():
@@ -117,12 +125,12 @@ def main():
     print("Bot rodando com sucesso...")
     app.run_polling()
 
-import asyncio
-
 if __name__ == '__main__':
     try:
+        # Gerenciamento manual do loop assíncrono para compatibilidade com o Render
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         main()
     except (KeyboardInterrupt, SystemExit):
         print("Bot desligado.")
+
