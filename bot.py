@@ -7,30 +7,32 @@ import yt_dlp
 # Seu Token gerado no BotFather
 TOKEN = "8812668800:AAHhAI9keRnUyPgZ5Ssv-_Swr0WP-ENM6wc"
 
-# Função que apenas pesquisa a música e extrai o link direto e o título (Sem baixar)
+# Função que pesquisa a música no SoundCloud para pegar o link (Livre de bloqueio de IP)
 def pesquisar_link_musica(nome_musica):
     opcoes_busca = {
         'format': 'bestaudio/best',
-        'default_search': 'ytsearch1', # Busca apenas o primeiro resultado
+        'default_search': 'scsearch1', # Busca o primeiro resultado no SoundCloud
         'nocheckcertificate': True,
         'ignoreerrors': True,
         'quiet': True,
     }
-    with yt_dlp.YoutubeDL(opcoes_busca) as ydl:
-        info = ydl.extract_info(nome_musica, download=False) # download=False não gera bloqueio pesado de IP
-        if info and 'entries' in info and len(info['entries']) > 0:
-            video = info['entries'][0]
-            return video['webpage_url'], video['title']
+    try:
+        with yt_dlp.YoutubeDL(opcoes_busca) as ydl:
+            info = ydl.extract_info(nome_musica, download=False)
+            if info and 'entries' in info and len(info['entries']) > 0:
+                video = info['entries'][0]
+                return video['webpage_url'], video['title']
+    except Exception as e:
+        print(f"Erro na busca: {str(e)}")
     return None, None
 
-# Função interna acionada pelo clique do botão para realizar o download real
+# Função interna que baixa o áudio a partir do link encontrado
 def baixar_audio_por_link(link_direto):
     opcoes_download = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'nocheckcertificate': True,
         'ignoreerrors': True,
-        'http_chunk_size': 1048576, # Burlar bloqueio camuflando tráfego
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -48,8 +50,8 @@ def baixar_audio_por_link(link_direto):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     instrucao = (
         "🎵 *Bem-vindo ao Buscador Resiliente de Músicas!* 🎵\n\n"
-        "Agora ficou mais fácil! Envie o nome de uma música.\n"
-        "Eu irei identificar o melhor link e te darei um *botão para baixar* de forma segura!"
+        "Envie o nome de uma música.\n"
+        "Eu irei identificar o link e te darei um *botão para baixar* em MP3!"
     )
     await update.message.reply_text(instrucao, parse_mode="Markdown")
 
@@ -62,7 +64,7 @@ async def receber_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await status_busca.delete()
     
     if not url_direta:
-        await update.message.reply_text("❌ Não consegui identificar um link estável para essa busca na nuvem.")
+        await update.message.reply_text("❌ Não consegui identificar essa música nas plataformas livres na nuvem.")
         return
 
     # Criação do botão físico integrado na mensagem do Telegram
@@ -78,7 +80,7 @@ async def receber_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Captura e gerencia o clique no botão físico de download
 async def escutar_clique_botao(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer() # Avisa ao Telegram que o clique foi recebido
+    await query.answer()
     
     dados = query.data.split("|")
     if dados[0] == "dl_link":
@@ -103,7 +105,6 @@ def main():
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receber_texto))
-    # Novo gatilho que escuta os cliques nos botões da tela
     app.add_handler(CallbackQueryHandler(escutar_clique_botao))
     
     print("Bot com botões interativos rodando...")
@@ -116,6 +117,7 @@ if __name__ == '__main__':
         main()
     except (KeyboardInterrupt, SystemExit):
         print("Bot desligado.")
+
 
 
 
