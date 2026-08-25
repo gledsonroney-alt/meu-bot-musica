@@ -3,22 +3,20 @@ import asyncio
 import re
 import urllib.request
 import urllib.parse
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import yt_dlp
 
 # Seu Token gerado no BotFather
 TOKEN = "8812668800:AAHhAI9keRnUyPgZ5Ssv-_Swr0WP-ENM6wc"
 
-# Função inteligente com múltiplos IFs de busca contra bloqueios
-def pesquisar_link_musica(nome_musica):
+# Função que varre motores de busca comuns capturando o link limpo do YouTube
+def pesquisar_link_na_web(nome_musica):
     busca_termo = f"{nome_musica} youtube"
     
-    # ----------------------------------------------------------------------
-    # TENTATIVA 1 (1º IF): Busca via DuckDuckGo HTML
-    # ----------------------------------------------------------------------
+    # --- IF 1: Tentativa Principal via DuckDuckGo ---
     try:
-        print("Tentando buscar link pelo motor: DuckDuckGo")
+        print(f"Buscando link na web via DuckDuckGo para: {nome_musica}")
         url_busca = "https://duckduckgo.com" + urllib.parse.quote(busca_termo)
         requisicao = urllib.request.Request(
             url_busca, 
@@ -27,52 +25,43 @@ def pesquisar_link_musica(nome_musica):
         with urllib.request.urlopen(requisicao, timeout=10) as resposta:
             html = resposta.read().decode('utf-8')
             
-        links_youtube = re.findall(r'watch\?v=([^"& \s]+)', html)
-        if links_youtube:
-            id_video = links_youtube[0] # Pega estritamente o primeiro resultado
-            print("Sucesso na busca via DuckDuckGo!")
-            return f"https://youtube.com{id_video}", nome_musica
-        else:
-            raise Exception("Nenhum link capturado na estrutura do DuckDuckGo.")
-            
+        links_v = re.findall(r'watch\?v=([^"& \s]+)', html)
+        if links_v and len(links_v) > 0:
+            id_limpo = links_v[0] # CORRIGIDO: Captura de forma isolada a primeira string da lista
+            print(f"Link extraído com sucesso pelo DuckDuckGo: https://www.youtube.com/watch?v={id_limpo}")
+            return f"https://www.youtube.com/watch?v={id_limpo}"
     except Exception as e:
-        print(f"O motor DuckDuckGo falhou devido a restrições: {str(e)}. Pulando para a próxima alternativa...")
+        print(f"DuckDuckGo falhou: {str(e)}. Pulando para o backup...")
 
-    # ----------------------------------------------------------------------
-    # TENTATIVA 2 (2º IF): Sistema de Backup via Raspagem do Google Vídeos
-    # ----------------------------------------------------------------------
+    # --- IF 2: Tentativa de Resgate via Google Vídeos ---
     try:
-        print("Tentando buscar link pelo motor alternativo: Google Vídeos")
+        print(f"Buscando link na web via Google Vídeos para: {nome_musica}")
         url_google = "https://google.com" + urllib.parse.quote(busca_termo) + "&tbm=vid"
         requisicao = urllib.request.Request(
             url_google, 
-            headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         )
         with urllib.request.urlopen(requisicao, timeout=10) as resposta:
             html = resposta.read().decode('utf-8')
             
-        links_google = re.findall(r'url\?q=https://www\.youtube\.com/watch\?v=([^"&]+)', html)
-        if links_google:
-            id_video = links_google[0] # Pega estritamente o primeiro resultado de backup
-            print("Sucesso na busca via Google Vídeos!")
-            return f"https://youtube.com{id_video}", nome_musica
-        else:
-            raise Exception("Nenhum link capturado na estrutura do Google.")
-            
+        links_g = re.findall(r'url\?q=https://www\.youtube\.com/watch\?v=([^"&]+)', html)
+        if links_g and len(links_g) > 0:
+            id_limpo = links_g[0] # CORRIGIDO: Captura de forma isolada o ID de backup
+            print(f"Link extraído com sucesso pelo Google Vídeos: https://www.youtube.com/watch?v={id_limpo}")
+            return f"https://www.youtube.com/watch?v={id_limpo}"
     except Exception as e:
-        print(f"O motor secundário Google falhou: {str(e)}.")
+        print(f"Google Vídeos falhou: {str(e)}")
         
-    # Se todas as rotas falharem por bloqueio de IP simultâneo na nuvem
-    return None, None
+    return None
 
-# Função interna que baixa o áudio a partir do link direto encontrado pelas buscas
+# Função interna de download direto por link estruturado (Dribla bloqueios)
 def baixar_audio_por_link(link_direto):
     opcoes_download = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'nocheckcertificate': True,
         'ignoreerrors': True,
-        'http_chunk_size': 1048576, # Fatia o download para o YouTube não derrubar a conexão
+        'http_chunk_size': 1048576, # Segmenta o download simulando tráfego real de navegador
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -89,65 +78,74 @@ def baixar_audio_por_link(link_direto):
 # Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     instrucao = (
-        "🎵 *Bem-vindo ao Buscador Resiliente de Músicas!* 🎵\n\n"
-        "Envie o nome de uma música.\n"
-        "Eu irei varrer os motores de busca atrás do link e te darei um *botão para baixar* em MP3!"
+        "🎵 *Bem-vindo ao Baixador Automático de Fila!* 🎵\n\n"
+        "O sistema agora pesquisa de forma invisível nos mecanismos web para baixar listas!\n\n"
+        "📝 *Opção 1: Digitar no chat*\n"
+        "• Envie uma música por linha (Recomendado: até 5 por vez).\n\n"
+        "📁 *Opção 2: Listas grandes de texto (.txt)*\n"
+        "• Envie o arquivo do Bloco de Notas para download em lote!"
     )
     await update.message.reply_text(instrucao, parse_mode="Markdown")
 
-# Processador de texto que identifica a música e gera o botão interativo
-async def receber_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    nome_musica = update.message.text.strip()
-    status_busca = await update.message.reply_text(f"🔍 Buscando referências na web para: '{nome_musica}'...")
-    
-    url_direta, titulo_video = pesquisar_link_musica(nome_musica)
-    await status_busca.delete()
-    
-    if not url_direta:
-        await update.message.reply_text("❌ Todas as tentativas de busca falharam por restrições na nuvem.")
+# Gerenciador da fila de processamento automático de lotes
+async def processar_e_enviar(update: Update, linhas: list):
+    if not linhas:
+        await update.message.reply_text("A lista enviada está vazia.")
         return
 
-    # Criação do botão físico integrado na mensagem do Telegram
-    teclado = [[InlineKeyboardButton(text="⬇️ Confirmar e Baixar MP3", callback_data=f"dl_link|{url_direta}")]]
-    reply_markup = InlineKeyboardMarkup(teclado)
-    
-    await update.message.reply_text(
-        f"📌 *Resultado Encontrado:*\n`{titulo_video}`\n\nClique no botão abaixo para processar o áudio:",
-        reply_markup=reply_markup,
-        parse_mode="Markdown"
-    )
+    total = len(linhas)
+    await update.message.reply_text(f"✅ Fila iniciada! Processando {total} itens via varredura web externa...")
+    os.makedirs("downloads", exist_ok=True)
 
-# Captura e gerencia o clique no botão físico de download
-async def escutar_clique_botao(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    dados = query.data.split("|")
-    if dados[0] == "dl_link":
-        link_alvo = dados[1]
-        progresso = await query.message.reply_text("⏳ Processando e convertendo arquivo MP3 na nuvem...")
-        
+    for indice, item in enumerate(linhas, start=1):
+        progresso = await update.message.reply_text(f"⏳ [{indice}/{total}] Identificando fontes estáveis para: {item}...")
         try:
-            os.makedirs("downloads", exist_ok=True)
-            caminho_arquivo = baixar_audio_por_link(link_alvo)
+            link_extraido = pesquisar_link_na_web(item)
+            
+            if not link_extraido:
+                raise Exception("Mecanismos de busca não retornaram links válidos para este nome.")
+
+            caminho_arquivo = baixar_audio_por_link(link_extraido)
             
             with open(caminho_arquivo, 'rb') as audio:
-                await query.message.reply_audio(audio=audio, title=os.path.basename(caminho_arquivo))
-                
+                await update.message.reply_audio(audio=audio, title=os.path.basename(caminho_arquivo))
+            
             os.remove(caminho_arquivo)
             await progresso.delete()
             
         except Exception as e:
-            await query.message.reply_text(f"❌ Erro crítico ao processar o link: {str(e)}")
+            await update.message.reply_text(f"❌ Erro ao processar '{item}': {str(e)}")
+
+# Recebimento de mensagens de texto direto
+async def receber_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    texto = update.message.text
+    linhas = [linha.strip() for item in texto.split('\n') if (linha := item.strip())]
+    await processar_e_enviar(update, linhas)
+
+# Recebimento de arquivos .txt em lote
+async def receber_arquivo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    documento = update.message.document
+    if not documento.file_name.endswith('.txt'):
+        await update.message.reply_text("Por favor, envie listas apenas em formato .txt.")
+        return
+
+    arquivo_telegram = await context.bot.get_file(documento.file_id)
+    caminho_temporario = f"temp_{documento.file_name}"
+    await arquivo_telegram.download_to_drive(caminho_temporario)
+
+    with open(caminho_temporario, 'r', encoding='utf-8') as f:
+        linhas = [linha.strip() for item in f.readlines() if (linha := item.strip())]
+
+    os.remove(caminho_temporario)
+    await processar_e_enviar(update, linhas=linhas)
 
 def main():
     app = Application.builder().token(TOKEN).read_timeout(120).write_timeout(120).build()
-    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receber_texto))
-    app.add_handler(CallbackQueryHandler(escutar_clique_botao))
+    app.add_handler(MessageHandler(filters.Document.ALL, receber_arquivo))
     
-    print("Bot com botões interativos rodando...")
+    print("Serviço de lote em lote online...")
     app.run_polling()
 
 if __name__ == '__main__':
