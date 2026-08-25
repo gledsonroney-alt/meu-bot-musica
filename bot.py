@@ -1,148 +1,112 @@
 import os
 import asyncio
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 import yt_dlp
 
 # Seu Token gerado no BotFather
 TOKEN = "8812668800:AAHhAI9keRnUyPgZ5Ssv-_Swr0WP-ENM6wc"
 
-# Função inteligente que tenta várias fontes nativas se encontrar qualquer restrição
-def baixar_audio(busca_ou_link):
-    if ":" in busca_ou_link and not busca_ou_link.startswith("http"):
-        busca_ou_link = busca_ou_link.replace(":", " ")
+# Função que apenas pesquisa a música e extrai o link direto e o título (Sem baixar)
+def pesquisar_link_musica(nome_musica):
+    opcoes_busca = {
+        'format': 'bestaudio/best',
+        'default_search': 'ytsearch1', # Busca apenas o primeiro resultado
+        'nocheckcertificate': True,
+        'ignoreerrors': True,
+        'quiet': True,
+    }
+    with yt_dlp.YoutubeDL(opcoes_busca) as ydl:
+        info = ydl.extract_info(nome_musica, download=False) # download=False não gera bloqueio pesado de IP
+        if info and 'entries' in info and len(info['entries']) > 0:
+            video = info['entries'][0]
+            return video['webpage_url'], video['title']
+    return None, None
 
-    # Lista de motores nativos aceitos pelo yt-dlp para exaustão de tentativas
-    motores_busca = ['ytsearch', 'ytsearch1', 'ytsmsearch']
-    
-    ultima_falha = ""
+# Função interna acionada pelo clique do botão para realizar o download real
+def baixar_audio_por_link(link_direto):
+    opcoes_download = {
+        'format': 'bestaudio/best',
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'nocheckcertificate': True,
+        'ignoreerrors': True,
+        'http_chunk_size': 1048576, # Burlar bloqueio camuflando tráfego
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'quiet': True
+    }
+    with yt_dlp.YoutubeDL(opcoes_download) as ydl:
+        info = ydl.extract_info(link_direto, download=True)
+        filename = ydl.prepare_filename(info)
+        nome_base, _ = os.path.splitext(filename)
+        return nome_base + ".mp3"
 
-    for motor in motores_busca:
-        print(f"Tentando baixar usando o motor: {motor}")
-        
-        opcoes = {
-            'format': 'bestaudio/best',
-            'default_search': motor,  
-            'outtmpl': 'downloads/%(title)s.%(ext)s',
-            'nocheckcertificate': True,   
-            'ignoreerrors': True,
-            # Força o yt-dlp a simular um navegador comum para evitar o bloqueio de robô
-            'http_chunk_size': 1048576,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True
-        }
-        
-        try:
-            with yt_dlp.YoutubeDL(opcoes) as ydl:
-                info = ydl.extract_info(busca_ou_link, download=True)
-                
-                if info is None:
-                    raise Exception("A plataforma bloqueou o IP temporariamente.")
-                    
-                if 'entries' in info:
-                    if len(info['entries']) > 0 and info['entries'] is not None:
-                        video = info['entries'][0]  # Correção para pegar o primeiro item de forma segura
-                    else:
-                        raise Exception("Nenhum vídeo retornado na busca.")
-                else:
-                    video = info
-                
-                filename = ydl.prepare_filename(video)
-                nome_base, _ = os.path.splitext(filename)
-                caminho_mp3 = nome_base + ".mp3"
-                
-                if os.path.exists(caminho_mp3):
-                    print(f"Sucesso usando o motor: {motor}")
-                    return caminho_mp3
-                else:
-                    raise Exception("O conversor falhou em gerar o arquivo MP3.")
-                    
-        except Exception as erro_atual:
-            ultima_falha = str(erro_atual)
-            print(f"O motor {motor} falhou: {ultima_falha}. Tentando próxima alternativa...")
-            continue
-
-    raise Exception(f"Todas as tentativas falharam por restrições das plataformas. Último erro: {ultima_falha}")
-
-# Comando /start com instruções de uso e limites
+# Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     instrucao = (
-        "🎵 *Bem-vindo ao Baixador de Músicas Auto-Resiliente!* 🎵\n\n"
-        "O sistema agora possui um mecanismo que dribla bloqueios e restrições automaticamente!\n\n"
-        "📝 *Opção 1: Digitar direto no chat*\n"
-        "• Envie uma música ou link por linha.\n"
-        "• ⚠️ *Recomendado:* No máximo *5 músicas* por mensagem.\n\n"
-        "📁 *Opção 2: Listas grandes (Recomendado)*\n"
-        "• Cole todas as músicas em um arquivo do *Bloco de Notas (.txt)*.\n"
-        "• Coloque uma música por linha.\n"
-        "• Anexe e envie o arquivo `.txt` aqui no chat.\n"
-        "• Ideal para listas longas com dezenas de músicas!\n\n"
-        "Pode enviar sua lista agora!"
+        "🎵 *Bem-vindo ao Buscador Resiliente de Músicas!* 🎵\n\n"
+        "Agora ficou mais fácil! Envie o nome de uma música.\n"
+        "Eu irei identificar o melhor link e te darei um *botão para baixar* de forma segura!"
     )
     await update.message.reply_text(instrucao, parse_mode="Markdown")
 
-# Função auxiliar para processar e baixar os itens com contador visual
-async def processar_e_enviar(update: Update, linhas: list):
-    # CORRIGIDO: alterado de 'lines' para 'linhas'
-    if not linhas:
-        await update.message.reply_text("A lista enviada está vazia.")
+# Processador de texto que identifica a música e gera o botão interativo
+async def receber_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    nome_musica = update.message.text.strip()
+    status_busca = await update.message.reply_text(f"🔍 Buscando referências para: '{nome_musica}'...")
+    
+    url_direta, titulo_video = pesquisar_link_musica(nome_musica)
+    await status_busca.delete()
+    
+    if not url_direta:
+        await update.message.reply_text("❌ Não consegui identificar um link estável para essa busca na nuvem.")
         return
 
-    total = len(linhas)
-    await update.message.reply_text(f"✅ Identifiquei {total} itens. Iniciando a fila de downloads com desvio de bloqueios...")
-    os.makedirs("downloads", exist_ok=True)
+    # Criação do botão físico integrado na mensagem do Telegram
+    teclado = [[InlineKeyboardButton(text="⬇️ Confirmar e Baixar MP3", callback_data=f"dl_link|{url_direta}")]]
+    reply_markup = InlineKeyboardMarkup(teclado)
+    
+    await update.message.reply_text(
+        f"📌 *Resultado Encontrado:*\n`{titulo_video}`\n\nClique no botão abaixo para processar o áudio:",
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
 
-    for indice, item in enumerate(linhas, start=1):
-        progresso = await update.message.reply_text(f"⏳ [{indice}/{total}] Processando fontes para: {item}...")
+# Captura e gerencia o clique no botão físico de download
+async def escutar_clique_botao(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer() # Avisa ao Telegram que o clique foi recebido
+    
+    dados = query.data.split("|")
+    if dados[0] == "dl_link":
+        link_alvo = dados[1]
+        progresso = await query.message.reply_text("⏳ Processando e convertendo arquivo MP3 na nuvem...")
+        
         try:
-            caminho_arquivo = baixar_audio(item)
+            os.makedirs("downloads", exist_ok=True)
+            caminho_arquivo = baixar_audio_por_link(link_alvo)
             
             with open(caminho_arquivo, 'rb') as audio:
-                await update.message.reply_audio(audio=audio, title=os.path.basename(caminho_arquivo))
-            
+                await query.message.reply_audio(audio=audio, title=os.path.basename(caminho_arquivo))
+                
             os.remove(caminho_arquivo)
             await progresso.delete()
             
         except Exception as e:
-            await update.message.reply_text(f"❌ Erro ao baixar '{item}': {str(e)}")
+            await query.message.reply_text(f"❌ Erro crítico ao processar o link: {str(e)}")
 
-# Processador de mensagens de texto direto no chat
-async def receber_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto = update.message.text
-    linhas = [linha.strip() for item in texto.split('\n') if (linha := item.strip())]
-    await processar_e_enviar(update, linhas=linhas)
-
-# Processador de arquivos de texto (.txt) enviados
-async def receber_arquivo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    documento = update.message.document
-    
-    if not documento.file_name.endswith('.txt'):
-        await update.message.reply_text("Por favor, envie a lista em formato do Bloco de Notas (.txt).")
-        return
-
-    arquivo_telegram = await context.bot.get_file(documento.file_id)
-    caminho_temporario = f"temp_{documento.file_name}"
-    await arquivo_telegram.download_to_drive(caminho_temporario)
-
-    with open(caminho_temporario, 'r', encoding='utf-8') as f:
-        linhas = [linha.strip() for item in f.readlines() if (linha := item.strip())]
-
-    os.remove(caminho_temporario)
-    await processar_e_enviar(update, linhas=linhas)
-
-# Execução do Bot com timeouts estendidos para segurança
 def main():
     app = Application.builder().token(TOKEN).read_timeout(120).write_timeout(120).build()
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receber_texto))
-    app.add_handler(MessageHandler(filters.Document.ALL, receber_arquivo))
+    # Novo gatilho que escuta os cliques nos botões da tela
+    app.add_handler(CallbackQueryHandler(escutar_clique_botao))
     
-    print("Bot rodando com sucesso...")
+    print("Bot com botões interativos rodando...")
     app.run_polling()
 
 if __name__ == '__main__':
@@ -152,5 +116,6 @@ if __name__ == '__main__':
         main()
     except (KeyboardInterrupt, SystemExit):
         print("Bot desligado.")
+
 
 
