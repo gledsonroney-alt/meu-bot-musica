@@ -26,7 +26,6 @@ def baixar_audio(busca_ou_link):
         'quiet': True
     }
 
-    }
     
     with yt_dlp.YoutubeDL(opcoes) as ydl:
         info = ydl.extract_info(busca_ou_link, download=True)
