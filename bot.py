@@ -11,13 +11,13 @@ def baixar_audio(busca_ou_link):
     if ":" in busca_ou_link and not busca_ou_link.startswith("http"):
         busca_ou_link = busca_ou_link.replace(":", " ")
 
-    opcoes = {
+        opcoes = {
         'format': 'bestaudio/best',
-        'default_search': 'ytsearch',  # Voltamos para o YouTube com parâmetros extras
+        'default_search': 'ytsearch',  
         'outtmpl': 'downloads/%(title)s.%(ext)s',
-        'ignoreerrors': True,         # Ignora pequenas falhas de metadados
-        'nocheckcertificate': True,   # Evita bloqueios de certificados de segurança
-        'cookiefile': 'cookies.txt',  # <--- LINHA ADICIONADA: Usa os cookies para evitar o bloqueio de bot
+        'cookiefile': 'cookies.txt',   # <--- ESSA LINHA FORÇA O USO DOS COOKIES
+        'ignoreerrors': True,         
+        'nocheckcertificate': True,   
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -25,6 +25,7 @@ def baixar_audio(busca_ou_link):
         }],
         'quiet': True
     }
+
 
     with yt_dlp.YoutubeDL(opcoes) as ydl:
         info = ydl.extract_info(busca_ou_link, download=True)
