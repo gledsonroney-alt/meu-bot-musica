@@ -45,7 +45,7 @@ def baixar_audio(busca_ou_link):
                     
                 if 'entries' in info:
                     if len(info['entries']) > 0 and info['entries'] is not None:
-                        video = info['entries'][0]  # Pega o primeiro item de forma direta e segura
+                        video = info['entries'][0]  # Correção para pegar o primeiro item de forma segura
                     else:
                         raise Exception("Nenhum vídeo retornado na busca.")
                 else:
@@ -87,7 +87,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Função auxiliar para processar e baixar os itens com contador visual
 async def processar_e_enviar(update: Update, linhas: list):
-    if not lines:
+    # CORRIGIDO: alterado de 'lines' para 'linhas'
+    if not linhas:
         await update.message.reply_text("A lista enviada está vazia.")
         return
 
@@ -151,4 +152,5 @@ if __name__ == '__main__':
         main()
     except (KeyboardInterrupt, SystemExit):
         print("Bot desligado.")
+
 
