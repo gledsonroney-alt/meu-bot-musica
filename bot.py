@@ -27,7 +27,7 @@ def pesquisar_link_na_web(nome_musica):
             
         links_v = re.findall(r'watch\?v=([^"& \s]+)', html)
         if links_v and len(links_v) > 0:
-            id_limpo = links_v[0]  # CORRIGIDO: Pega estritamente a primeira string isolada
+            id_limpo = links_v[0]  # CORRIGIDO: Coleta estritamente o índice 0 da lista capturada
             print(f"Link extraído pelo DuckDuckGo: https://www.youtube.com/watch?v={id_limpo}")
             return f"https://www.youtube.com/watch?v={id_limpo}"
     except Exception as e:
@@ -46,7 +46,7 @@ def pesquisar_link_na_web(nome_musica):
             
         links_g = re.findall(r'url\?q=https://www\.youtube\.com/watch\?v=([^"&]+)', html)
         if links_g and len(links_g) > 0:
-            id_limpo = links_g[0]  # CORRIGIDO: Pega estritamente a primeira string de backup
+            id_limpo = links_g[0]  # CORRIGIDO: Coleta estritamente o índice 0 da lista capturada de backup
             print(f"Link extraído pelo Google Vídeos: https://www.youtube.com/watch?v={id_limpo}")
             return f"https://www.youtube.com/watch?v={id_limpo}"
     except Exception as e:
@@ -61,7 +61,7 @@ def baixar_audio_por_link(link_direto):
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'nocheckcertificate': True,
         'ignoreerrors': True,
-        'http_chunk_size': 1048576, # Fatia o download para evitar travas de conexão na nuvem
+        'http_chunk_size': 1048576, # Fatia o tráfego para camuflar o IP na nuvem do Render
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -75,7 +75,7 @@ def baixar_audio_por_link(link_direto):
         nome_base, _ = os.path.splitext(filename)
         return nome_base + ".mp3"
 
-# Comando /start com instruções de uso e limites
+# Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     instrucao = (
         "🎵 *Bem-vindo ao Baixador Automático de Fila!* 🎵\n\n"
@@ -145,7 +145,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receber_texto))
     app.add_handler(MessageHandler(filters.Document.ALL, receber_arquivo))
     
-    print("Serviço de lote em lote online...")
+    print("Serviço de lote online...")
     app.run_polling()
 
 if __name__ == '__main__':
