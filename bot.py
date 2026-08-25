@@ -27,7 +27,7 @@ def pesquisar_link_na_web(nome_musica):
             
         links_v = re.findall(r'watch\?v=([^"& \s]+)', html)
         if links_v and len(links_v) > 0:
-            id_limpo = links_v[0]  # CORRIGIDO: Pega a string do primeiro ID encontrado
+            id_limpo = links_v[0]  # PEGA O PRIMEIRO ITEM ISOLADO DA LISTA (INDEX ZERO)
             print(f"Link extraído pelo DuckDuckGo: https://youtube.com{id_limpo}")
             return f"https://youtube.com{id_limpo}"
     except Exception as e:
@@ -46,7 +46,7 @@ def pesquisar_link_na_web(nome_musica):
             
         links_g = re.findall(r'url\?q=https://www\.youtube\.com/watch\?v=([^"&]+)', html)
         if links_g and len(links_g) > 0:
-            id_limpo = links_g[0]  # CORRIGIDO: Pega a string do primeiro ID de backup
+            id_limpo = links_g[0]  # PEGA O PRIMEIRO ITEM ISOLADO DE BACKUP (INDEX ZERO)
             print(f"Link extraído pelo Google Vídeos: https://youtube.com{id_limpo}")
             return f"https://youtube.com{id_limpo}"
     except Exception as e:
@@ -61,7 +61,7 @@ def baixar_audio_por_link(link_direto):
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'nocheckcertificate': True,
         'ignoreerrors': True,
-        'http_chunk_size': 1048576, # Segmenta o download para simular tráfego real de navegador
+        'http_chunk_size': 1048576, # Segmenta o download para camuflar tráfego na nuvem do Render
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -139,13 +139,23 @@ async def receber_arquivo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     os.remove(caminho_temporario)
     await processar_e_enviar(update, linhas=linhas)
 
+# Inicialização limpando o tráfego travado antes de subir o Polling
+async def inicializar_limpo(app):
+    print("Derrubando conexões e webhooks antigos para evitar Conflict de portas...")
+    await app.bot.delete_webhook(drop_pending_updates=True) # LIMPA O BUFFER TRAVADO DO TELEGRAM
+
 def main():
     app = Application.builder().token(TOKEN).read_timeout(120).write_timeout(120).build()
+    
+    # Adiciona a rotina de limpeza automática antes de ligar
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(inicializar_limpo(app))
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receber_texto))
     app.add_handler(MessageHandler(filters.Document.ALL, receber_arquivo))
     
-    print("Serviço de lote online...")
+    print("Serviço de lote online e livre de conflitos...")
     app.run_polling()
 
 if __name__ == '__main__':
