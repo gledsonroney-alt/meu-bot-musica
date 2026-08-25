@@ -7,17 +7,16 @@ import yt_dlp
 # Seu Token gerado no BotFather
 TOKEN = "8812668800:AAHhAI9keRnUyPgZ5Ssv-_Swr0WP-ENM6wc"
 
-# Função inteligente que tenta várias fontes se encontrar qualquer restrição
+# Função inteligente que tenta várias fontes nativas se encontrar qualquer restrição
 def baixar_audio(busca_ou_link):
     if ":" in busca_ou_link and not busca_ou_link.startswith("http"):
         busca_ou_link = busca_ou_link.replace(":", " ")
 
-    # Lista de motores de busca organizados do melhor para o mais aberto
-    motores_busca = ['ytsearch', 'ddgsearch', 'scsearch']
+    # Lista de motores nativos aceitos pelo yt-dlp para exaustão de tentativas
+    motores_busca = ['ytsearch', 'ytsearch1', 'ytsmsearch']
     
     ultima_falha = ""
 
-    # O bot percorre a lista tentando um por um se houver qualquer erro
     for motor in motores_busca:
         print(f"Tentando baixar usando o motor: {motor}")
         
@@ -26,7 +25,9 @@ def baixar_audio(busca_ou_link):
             'default_search': motor,  
             'outtmpl': 'downloads/%(title)s.%(ext)s',
             'nocheckcertificate': True,   
-            'ignoreerrors': True,         
+            'ignoreerrors': True,
+            # Força o yt-dlp a simular um navegador comum para evitar o bloqueio de robô
+            'http_chunk_size': 1048576,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
@@ -39,15 +40,14 @@ def baixar_audio(busca_ou_link):
             with yt_dlp.YoutubeDL(opcoes) as ydl:
                 info = ydl.extract_info(busca_ou_link, download=True)
                 
-                # Se a plataforma barrou ou não retornou dados, força o erro para ir para o próximo IF
                 if info is None:
-                    raise Exception("A plataforma bloqueou ou retornou dados vazios.")
+                    raise Exception("A plataforma bloqueou o IP temporariamente.")
                     
                 if 'entries' in info:
-                    if len(info['entries']) > 0 and info['entries'][0] is not None:
-                        video = info['entries'][0]
+                    if len(info['entries']) > 0 and info['entries'] is not None:
+                        video = info['entries'][0]  # Pega o primeiro item de forma direta e segura
                     else:
-                        raise Exception("Nenhum resultado de mídia encontrado nesta plataforma.")
+                        raise Exception("Nenhum vídeo retornado na busca.")
                 else:
                     video = info
                 
@@ -55,20 +55,17 @@ def baixar_audio(busca_ou_link):
                 nome_base, _ = os.path.splitext(filename)
                 caminho_mp3 = nome_base + ".mp3"
                 
-                # Garante que o arquivo MP3 realmente foi gerado e convertido pelo FFmpeg antes de validar
                 if os.path.exists(caminho_mp3):
                     print(f"Sucesso usando o motor: {motor}")
                     return caminho_mp3
                 else:
-                    raise Exception("O conversor FFmpeg falhou em gerar o arquivo final.")
+                    raise Exception("O conversor falhou em gerar o arquivo MP3.")
                     
         except Exception as erro_atual:
-            # Se der qualquer erro (bloqueio, DRM, IP), ele salva o aviso e pula para o próximo motor
             ultima_falha = str(erro_atual)
-            print(f"O motor {motor} falhou devido a restrições: {ultima_falha}. Tentando próxima alternativa...")
+            print(f"O motor {motor} falhou: {ultima_falha}. Tentando próxima alternativa...")
             continue
 
-    # Se saiu do loop e testou tudo sem sucesso, dispara o erro geral com o último motivo
     raise Exception(f"Todas as tentativas falharam por restrições das plataformas. Último erro: {ultima_falha}")
 
 # Comando /start com instruções de uso e limites
@@ -90,7 +87,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Função auxiliar para processar e baixar os itens com contador visual
 async def processar_e_enviar(update: Update, linhas: list):
-    if not linhas:
+    if not lines:
         await update.message.reply_text("A lista enviada está vazia.")
         return
 
@@ -116,7 +113,7 @@ async def processar_e_enviar(update: Update, linhas: list):
 async def receber_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text
     linhas = [linha.strip() for item in texto.split('\n') if (linha := item.strip())]
-    await processar_e_enviar(update, linhas)
+    await processar_e_enviar(update, linhas=linhas)
 
 # Processador de arquivos de texto (.txt) enviados
 async def receber_arquivo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -154,3 +151,4 @@ if __name__ == '__main__':
         main()
     except (KeyboardInterrupt, SystemExit):
         print("Bot desligado.")
+
