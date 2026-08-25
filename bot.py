@@ -7,52 +7,75 @@ import yt_dlp
 # Seu Token gerado no BotFather
 TOKEN = "8812668800:AAHhAI9keRnUyPgZ5Ssv-_Swr0WP-ENM6wc"
 
-# Função para baixar o áudio usando yt-dlp
+# Função inteligente que tenta várias fontes se encontrar qualquer restrição
 def baixar_audio(busca_ou_link):
-    # Remove dois pontos (:) do início do texto para evitar erro de protocolo/URL falsa
     if ":" in busca_ou_link and not busca_ou_link.startswith("http"):
         busca_ou_link = busca_ou_link.replace(":", " ")
 
-    opcoes = {
-        'format': 'bestaudio/best',
-        'default_search': 'ytsearch',  # Busca por nome no YouTube se não for link
-        'outtmpl': 'downloads/%(title)s.%(ext)s',
-        'cookiefile': 'cookies.txt',   # Utiliza os cookies para evitar o bloqueio de robô
-        'ignoreerrors': True,         # Ignora pequenas falhas de metadados
-        'nocheckcertificate': True,   # Evita bloqueios de certificados de segurança
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-        'quiet': True
-    }
+    # Lista de motores de busca organizados do melhor para o mais aberto
+    motores_busca = ['ytsearch', 'ddgsearch', 'scsearch']
     
-    with yt_dlp.YoutubeDL(opcoes) as ydl:
-        info = ydl.extract_info(busca_ou_link, download=True)
+    ultima_falha = ""
+
+    # O bot percorre a lista tentando um por um se houver qualquer erro
+    for motor in motores_busca:
+        print(f"Tentando baixar usando o motor: {motor}")
         
-        # Proteção caso o YouTube bloqueie a requisição e retorne None
-        if info is None:
-            raise Exception("O YouTube barrou o download. Verifique se o arquivo cookies.txt está atualizado no GitHub.")
-            
-        if 'entries' in info:
-            # Se for uma lista de resultados da busca por texto, pega o primeiro vídeo válido
-            if len(info['entries']) > 0 and info['entries'][0] is not None:
-                video = info['entries'][0]
-            else:
-                raise Exception("Nenhum resultado encontrado para esta busca.")
-        else:
-            video = info
+        opcoes = {
+            'format': 'bestaudio/best',
+            'default_search': motor,  
+            'outtmpl': 'downloads/%(title)s.%(ext)s',
+            'nocheckcertificate': True,   
+            'ignoreerrors': True,         
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True
+        }
         
-        filename = ydl.prepare_filename(video)
-        nome_base, _ = os.path.splitext(filename)
-        return nome_base + ".mp3"
+        try:
+            with yt_dlp.YoutubeDL(opcoes) as ydl:
+                info = ydl.extract_info(busca_ou_link, download=True)
+                
+                # Se a plataforma barrou ou não retornou dados, força o erro para ir para o próximo IF
+                if info is None:
+                    raise Exception("A plataforma bloqueou ou retornou dados vazios.")
+                    
+                if 'entries' in info:
+                    if len(info['entries']) > 0 and info['entries'][0] is not None:
+                        video = info['entries'][0]
+                    else:
+                        raise Exception("Nenhum resultado de mídia encontrado nesta plataforma.")
+                else:
+                    video = info
+                
+                filename = ydl.prepare_filename(video)
+                nome_base, _ = os.path.splitext(filename)
+                caminho_mp3 = nome_base + ".mp3"
+                
+                # Garante que o arquivo MP3 realmente foi gerado e convertido pelo FFmpeg antes de validar
+                if os.path.exists(caminho_mp3):
+                    print(f"Sucesso usando o motor: {motor}")
+                    return caminho_mp3
+                else:
+                    raise Exception("O conversor FFmpeg falhou em gerar o arquivo final.")
+                    
+        except Exception as erro_atual:
+            # Se der qualquer erro (bloqueio, DRM, IP), ele salva o aviso e pula para o próximo motor
+            ultima_falha = str(erro_atual)
+            print(f"O motor {motor} falhou devido a restrições: {ultima_falha}. Tentando próxima alternativa...")
+            continue
+
+    # Se saiu do loop e testou tudo sem sucesso, dispara o erro geral com o último motivo
+    raise Exception(f"Todas as tentativas falharam por restrições das plataformas. Último erro: {ultima_falha}")
 
 # Comando /start com instruções de uso e limites
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     instrucao = (
-        "🎵 *Bem-vindo ao Baixador de Músicas!* 🎵\n\n"
-        "Aqui estão as melhores formas de enviar suas músicas para evitar erros:\n\n"
+        "🎵 *Bem-vindo ao Baixador de Músicas Auto-Resiliente!* 🎵\n\n"
+        "O sistema agora possui um mecanismo que dribla bloqueios e restrições automaticamente!\n\n"
         "📝 *Opção 1: Digitar direto no chat*\n"
         "• Envie uma música ou link por linha.\n"
         "• ⚠️ *Recomendado:* No máximo *5 músicas* por mensagem.\n\n"
@@ -72,12 +95,11 @@ async def processar_e_enviar(update: Update, linhas: list):
         return
 
     total = len(linhas)
-    await update.message.reply_text(f"✅ Identifiquei {total} itens. Iniciando a fila de downloads...")
+    await update.message.reply_text(f"✅ Identifiquei {total} itens. Iniciando a fila de downloads com desvio de bloqueios...")
     os.makedirs("downloads", exist_ok=True)
 
     for indice, item in enumerate(linhas, start=1):
-        # Mostra o progresso atualizado (ex: [1/27]) para o usuário acompanhar
-        progresso = await update.message.reply_text(f"⏳ [{indice}/{total}] Baixando: {item}...")
+        progresso = await update.message.reply_text(f"⏳ [{indice}/{total}] Processando fontes para: {item}...")
         try:
             caminho_arquivo = baixar_audio(item)
             
@@ -127,10 +149,8 @@ def main():
 
 if __name__ == '__main__':
     try:
-        # Gerenciamento manual do loop assíncrono para compatibilidade com o Render
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         main()
     except (KeyboardInterrupt, SystemExit):
         print("Bot desligado.")
-
